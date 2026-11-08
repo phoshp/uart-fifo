@@ -1,0 +1,4 @@
+build/
+abc.history
+*.vcd
+*.vvp
