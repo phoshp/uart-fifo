@@ -16,6 +16,8 @@ all: test
 $(BUILD):
 	mkdir -p $(BUILD)
 
+.PRECIOUS: $(BUILD)/%.vvp $(BUILD)/%.vcd
+
 $(BUILD)/%.vvp: tb/%.v $(RTL) | $(BUILD)
 	$(IVERILOG) -g2005 -Wall -o $@ $(RTL) $<
 
@@ -36,9 +38,12 @@ lint: | $(BUILD)
 synth:
 	$(YOSYS) -Q -p "read_verilog $(RTL); synth -top uart_fifo; stat"
 
+$(BUILD)/%.vcd: $(BUILD)/%.vvp
+	$(VVP) $<
+
 # make wave_tb_uart_fifo
-wave_%: $(BUILD)/%.vvp
-	$(GTKWAVE) $(BUILD)/$*.vcd &
+wave_%: $(BUILD)/%.vcd
+	$(GTKWAVE) $< &
 
 clean:
 	rm -rf $(BUILD)
