@@ -49,16 +49,14 @@ module uart_fifo #(
 
     // ---------------------------------------------------------------- TX path
     wire [7:0] tx_fifo_dout;
-    wire       tx_fifo_empty;
     wire       tx_ready;
 
     // Pop the TX FIFO only when the transmitter can actually take a byte.
-    wire tx_fifo_rd_en = !tx_fifo_empty && tx_ready;
+    wire tx_fifo_rd_en = !tx_empty && tx_ready;
 
     fifo #(
-        .WIDTH  (8),
-        .DEPTH  (FIFO_DEPTH),
-        .ADDR_W (FIFO_AW)
+        .WIDTH (8),
+        .DEPTH (FIFO_DEPTH)
     ) tx_fifo (
         .clk   (clk),
         .rst   (rst),
@@ -67,7 +65,7 @@ module uart_fifo #(
         .rd_en (tx_fifo_rd_en),
         .dout  (tx_fifo_dout),
         .full  (tx_full),
-        .empty (tx_fifo_empty),
+        .empty (tx_empty),
         .count (tx_count)
     );
 
@@ -77,19 +75,16 @@ module uart_fifo #(
     ) u_tx (
         .clk   (clk),
         .rst   (rst),
-        .valid (!tx_fifo_empty),
+        .valid (!tx_empty),
         .data  (tx_fifo_dout),
         .ready (tx_ready),
         .tx    (tx),
         .done  (tx_done)
     );
 
-    assign tx_empty = tx_fifo_empty;
-
     // ---------------------------------------------------------------- RX path
     wire [7:0] rx_fifo_din;
     wire       rx_valid;
-    wire       rx_frame_err_pulse;
 
     uart_rx #(
         .CLK_FREQ  (CLK_FREQ),
@@ -100,16 +95,15 @@ module uart_fifo #(
         .rx         (rx),
         .data_out   (rx_fifo_din),
         .data_valid (rx_valid),
-        .frame_err  (rx_frame_err_pulse)
+        .frame_err  (rx_frame_err)
     );
 
     // Drop received bytes if the RX FIFO is full (host is not draining).
     wire rx_fifo_wr_en = rx_valid && !rx_full;
 
     fifo #(
-        .WIDTH  (8),
-        .DEPTH  (FIFO_DEPTH),
-        .ADDR_W (FIFO_AW)
+        .WIDTH (8),
+        .DEPTH (FIFO_DEPTH)
     ) rx_fifo (
         .clk   (clk),
         .rst   (rst),
@@ -121,8 +115,6 @@ module uart_fifo #(
         .empty (rx_empty),
         .count (rx_count)
     );
-
-    assign rx_frame_err = rx_frame_err_pulse;
 
 endmodule
 
