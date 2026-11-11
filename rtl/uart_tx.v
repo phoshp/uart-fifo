@@ -39,11 +39,10 @@ module uart_tx #(
     reg [2:0]       bit_idx;
     reg [7:0]       shift;
     reg             tx_r;
-    reg             ready_r;
     reg             done_r;
 
     assign tx    = tx_r;
-    assign ready = ready_r;
+    assign ready = (state == S_IDLE);
     assign done  = done_r;
 
     always @(posedge clk) begin
@@ -53,7 +52,6 @@ module uart_tx #(
             bit_idx <= 3'd0;
             shift   <= 8'd0;
             tx_r    <= 1'b1;
-            ready_r <= 1'b1;
             done_r  <= 1'b0;
         end else begin
             done_r <= 1'b0;
@@ -61,12 +59,10 @@ module uart_tx #(
             case (state)
                 S_IDLE: begin
                     tx_r    <= 1'b1;
-                    ready_r <= 1'b1;
                     clk_cnt <= {CNT_W{1'b0}};
-                    if (valid && ready_r) begin
-                        shift   <= data;
-                        ready_r <= 1'b0;
-                        state   <= S_START;
+                    if (valid) begin
+                        shift <= data;
+                        state <= S_START;
                     end
                 end
 
