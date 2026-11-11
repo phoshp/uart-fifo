@@ -41,8 +41,7 @@ module fifo #(
 
     assign dout  = mem[rd_addr];
     assign empty = (wr_ptr == rd_ptr);
-    assign full  = (wr_ptr[ADDR_W] != rd_ptr[ADDR_W]) &&
-                   (wr_ptr[ADDR_W-1:0] == rd_ptr[ADDR_W-1:0]);
+    assign full  = (wr_ptr[ADDR_W] != rd_ptr[ADDR_W]) && (wr_addr == rd_addr);
     assign count = wr_ptr - rd_ptr;
 
     always @(posedge clk) begin
