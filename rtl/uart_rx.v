@@ -4,12 +4,11 @@
 // 8N1 UART receiver with 16x oversampling.
 //
 // The incoming line is passed through a 2-flop synchronizer. A high-to-low
-// transition arms the receiver; the start bit is verified at its midpoint,
-// then every data bit is sampled at its midpoint. `data_valid` pulses for one
-// clock on a good stop bit; `frame_err` pulses for one clock if the stop bit
-// is low.
+// transition in IDLE directly arms the receiver and aligns the sample timer;
+// the start bit is verified at its midpoint, then every data bit is sampled
+// at its midpoint. `data_valid` pulses for one clock on a good stop bit;
+// `frame_err` pulses for one clock if the stop bit is low.
 //
-// Falling edges are latched so a start bit is not missed between sample ticks.
 // A still-low line (e.g. after a framing error) cannot retrigger a frame until
 // it has gone high again.
 //
@@ -36,8 +35,8 @@ module uart_rx #(
     /* verilator lint_off WIDTHTRUNC */
     localparam [CNT_W-1:0] LAST_SMPL = CLKS_PER_SMPL - 1;
     localparam [3:0]       LAST_SMP  = OVERSAMPLE - 1;
+    localparam [3:0]       MID       = (OVERSAMPLE / 2) - 1;
     /* verilator lint_on WIDTHTRUNC */
-    localparam [3:0]       MID       = 4'd7;   // OVERSAMPLE / 2 - 1
 
     localparam [1:0] S_IDLE  = 2'd0,
                      S_START = 2'd1,
@@ -49,12 +48,10 @@ module uart_rx #(
     reg [3:0]       sample_cnt;
     reg [2:0]       bit_idx;
     reg [7:0]       shift;
-    reg             start_valid;
 
     reg rx_sync0;
     reg rx_sync1;
     reg rx_prev;
-    reg start_pending;
 
     wire rx_s = rx_sync1;
     wire fall = !rx_s && rx_prev;
@@ -66,11 +63,9 @@ module uart_rx #(
             sample_cnt    <= 4'd0;
             bit_idx       <= 3'd0;
             shift         <= 8'd0;
-            start_valid   <= 1'b0;
             rx_sync0      <= 1'b1;
             rx_sync1      <= 1'b1;
             rx_prev       <= 1'b1;
-            start_pending <= 1'b0;
             data_out      <= 8'd0;
             data_valid    <= 1'b0;
             frame_err     <= 1'b0;
@@ -80,47 +75,30 @@ module uart_rx #(
             rx_sync1 <= rx_sync0;
             rx_prev  <= rx_s;
 
-            // Latch any falling edge so a start bit is not lost between
-            // sample ticks. Outside IDLE, edges are ignored.
-            if (fall)
-                start_pending <= 1'b1;
-            else if (state != S_IDLE)
-                start_pending <= 1'b0;
-
             data_valid <= 1'b0;
             frame_err  <= 1'b0;
 
-            if (clk_cnt == LAST_SMPL) begin
+            if (state == S_IDLE) begin
+                clk_cnt    <= {CNT_W{1'b0}};
+                sample_cnt <= 4'd0;
+                if (fall)
+                    state <= S_START;
+            end else if (clk_cnt == LAST_SMPL) begin
                 clk_cnt <= {CNT_W{1'b0}};
 
                 case (state)
-                    S_IDLE: begin
-                        if (start_pending || fall) begin
-                            state         <= S_START;
-                            sample_cnt    <= 4'd0;
-                            start_valid   <= 1'b0;
-                            start_pending <= 1'b0;
-                        end
-                    end
-
                     S_START: begin
                         if (sample_cnt == MID) begin
                             if (!rx_s) begin
-                                start_valid <= 1'b1;
-                                sample_cnt  <= sample_cnt + 1'b1;
+                                sample_cnt <= sample_cnt + 1'b1;
                             end else begin
                                 // Glitch, not a real start bit.
-                                state      <= S_IDLE;
-                                sample_cnt <= 4'd0;
+                                state <= S_IDLE;
                             end
                         end else if (sample_cnt == LAST_SMP) begin
                             sample_cnt <= 4'd0;
-                            if (start_valid) begin
-                                state   <= S_DATA;
-                                bit_idx <= 3'd0;
-                            end else begin
-                                state <= S_IDLE;
-                            end
+                            state      <= S_DATA;
+                            bit_idx    <= 3'd0;
                         end else begin
                             sample_cnt <= sample_cnt + 1'b1;
                         end
@@ -149,8 +127,7 @@ module uart_rx #(
                             end else begin
                                 frame_err  <= 1'b1;
                             end
-                            state      <= S_IDLE;
-                            sample_cnt <= 4'd0;
+                            state <= S_IDLE;
                         end else begin
                             sample_cnt <= sample_cnt + 1'b1;
                         end
